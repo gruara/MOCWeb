@@ -1,2 +1,2 @@
-cd C:\Users\Andrew\Git\MOCWeb
+cd C:\Users\Andrew\MOCWeb
 python manage.py runserver

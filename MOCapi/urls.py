@@ -4,5 +4,7 @@ from . import views
 
 urlpatterns = [
     url(r'^$', views.index, name='index'),
-    url(r'^\/api\/v1.0\/tracks\/$', views.tracks, name='Tracks')
+#   still allowing.....tracks//777 through although track_id is still correctly
+#   identified as 777
+    url(r'^\/api\/v1.0\/tracks\/?(\/(\d+))?$', views.tracks, name='Tracks')
 ]

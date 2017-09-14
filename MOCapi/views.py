@@ -1,13 +1,17 @@
 from django.shortcuts import render
-from django.http import HttpResponse#
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core import serializers
-from django.http import JsonResponse
-from MOCapi.models import Tracks
+from django.core.exceptions import ValidationError
+from MOCapi.models import Tracks, Users
 import json
 
 def index(request):
-    return HttpResponse("Go away")
+    HttpResponse.status_code = 501
+    error = {
+            'error_code' : 501,
+            'error_message' : 'Method not supported' }
+    return JsonResponse(error, safe=False)
 
 # Create your views here.
 @csrf_exempt
@@ -15,65 +19,67 @@ def tracks(request, end_path, resource_id):
     path = request.path
 
     HttpResponse.status_code = 200
-    
-    
+
     if request.method == 'GET' and resource_id is None:
         resp = getAllTracks()
-        if resp is None:
-            HttpResponse.status_code = 500
-            return HttpResponse('Failure')
-        else:
-            return JsonResponse(resp, safe=False)
+        return JsonResponse(resp, safe=False)
     else:
         if request.method == 'GET' and resource_id is not None:
             resp = getOneTrack(resource_id)
-            if resp is None:
-                HttpResponse.status_code = 404
-                return HttpResponse('Not found')
-            else:
-                return JsonResponse(resp,safe=False)
+            return JsonResponse(resp,safe=False)
         else:
             if request.method == 'PUT' and resource_id is not None:
                 resp = updateTrack(resource_id)
-                return HttpResponse("Putting on the Ritz")
+                return JsonResponse(resp, safe=False)
             else:
                 if request.method == 'POST' and resource_id is None:
                     resp = insertTrack(request.body)
-                    if resp is None:
-                        HttpResponse.status_code = 500
-                        return HttpResponse('Failure')
-                    else:
-                        return HttpResponse("Return to sender")
+                    return JsonResponse(resp, safe=False)
                 else:
                     HttpResponse.status_code = 501
-                    return HttpResponse("I give up")
+                    error = {
+                            'error_code' : 501,
+                            'error_message' : 'Method not supported' }
+                    return JsonResponse(error, safe=False)
             
 def getAllTracks():
     try:
-        tracks = Tracks.objects.all().filter(user_id='andrew@gruar.co.uk')
+        tracks = Tracks.objects.all().filter(user_id='pegi@gruar.co.uk')
     except:
-        return None
+        HttpResponse.status_code = 500
+        error = {
+                'error_code' : 500,
+                'error_message' : 'Unexpected database error' }
+        return error
+
+    if Tracks.objects.all().filter(user_id='pegi@gruar.co.uk').count() == 0:
+        HttpResponse.status_code = 404
+        error = {
+                'error_code' : 404,
+                'error_message' : 'No matching records' }
+        return error
+        
     payload = []
     for track in tracks:
         dict = buildTrackDict(track)
         payload.append(dict)
     
-#     print(tracks.count())
-#     payload = serializers.serialize('json', tracks)
-    print(payload)
     return payload
     
 def getOneTrack(track_id):
     try:
         track = Tracks.objects.get(pk=track_id)
     except:
-        return None
+        HttpResponse.status_code = 400
+        error = {
+                'error_code' : 404,
+                'error_message' : 'Track not found' }
+        return error
     payload = buildTrackDict(track)
     return payload
     
 def insertTrack(payloadJ):
     payload = json.loads(payloadJ)
-    print(payload['track_name'])
     track = Tracks(
                     user_id = payload['user_id'],
                     track_name = payload['track_name'],
@@ -81,17 +87,31 @@ def insertTrack(payloadJ):
                        )
     try:                
         track.save()
-#     except ValidationError, e:
-#         HttpResponse.status_code = 400
-#         return None
+    except ValidationError as e:
+        error = {
+                'error_code' : 400,
+                'error_message' : e.messages }
+        
+        HttpResponse.status_code = 400
+
+        return error
     except:
+        error = {
+                'error_code' : 500,
+                'error_message' : "Unexpected Database Error"}
+        
         HttpResponse.status_code = 500
-        return None
-    print(track)
-    return track.id
+        return error
+
+    response = {'message' : (track.id, ' Inserted'),  }
+    
+    HttpResponse.status_code = 201
+    
+    return response
     
 def updateTrack(track_id):
-    return ('update', track_id )
+    response = {'message' : 'Track updated' }
+    return response
     
 def buildTrackDict(track):
     trackDict = {
@@ -100,8 +120,13 @@ def buildTrackDict(track):
             'track_name' : track.track_name,
             'created_on' : track.created_on
         }
-#    print(row[4])
     return trackDict    
     
-                
+def users(request, end_path, resource_id):
+    path = request.path
+
+    HttpResponse.status_code = 200
+    HttpResponse.reason_phrase = 'OK'
+    
+                    
     

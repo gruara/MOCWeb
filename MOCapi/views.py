@@ -5,7 +5,11 @@ from django.core import serializers
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from MOCapi.models import Tracks, Users
+from passlib.hash import pbkdf2_sha256
 import json
+import uuid
+import datetime
+import pytz
 
 def index(request):
     HttpResponse.status_code = 501
@@ -18,16 +22,16 @@ def index(request):
 @csrf_exempt
 def tracks(request, end_path, resource_id):
     if request.method == 'GET' and resource_id is None:
-        resp = getAllTracks()
+        resp = getAllTracks(request)
     else:
         if request.method == 'GET' and resource_id is not None:
-            resp = getOneTrack(resource_id)
+            resp = getOneTrack(request, resource_id)
         else:
             if request.method == 'PUT' and resource_id is not None:
-                resp = updateTrack(resource_id)
+                resp = updateTrack(request, resource_id)
             else:
                 if request.method == 'POST' and resource_id is None:
-                    resp = insertTrack(request.body)
+                    resp = insertTrack(request)
                 else:
                     resp = {
                             'error_code' : 501,
@@ -35,10 +39,17 @@ def tracks(request, end_path, resource_id):
     if 'error_code' in resp:
         HttpResponse.status_code = resp['error_code']
     else:
-        HttpResponse.status_code = 200    
+        HttpResponse.status_code = 200
+   
     return JsonResponse(resp, safe=False)
             
-def getAllTracks():
+def getAllTracks(request):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
+        
     try:
         tracks = Tracks.objects.all().filter(user_id='iola@gruar.co.uk')
     except:
@@ -60,7 +71,12 @@ def getAllTracks():
     
     return payload
     
-def getOneTrack(track_id):
+def getOneTrack(request, track_id):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
     try:
         track = Tracks.objects.get(pk=track_id)
     except:
@@ -71,8 +87,13 @@ def getOneTrack(track_id):
     payload = buildTrackDict(track)
     return payload
     
-def insertTrack(payloadJ):
-    payload = json.loads(payloadJ)
+def insertTrack(request):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
+    payload = json.loads(request.body)
     track = Tracks(
                     user_id = payload['user_id'],
                     track_name = payload['track_name'],
@@ -88,7 +109,7 @@ def insertTrack(payloadJ):
     except IntegrityError as e:
         error = {
                 'error_code' : 400,
-                'error_message' : e.messages }
+                'error_message' : e.__cause__.pgerror}
         return error
     except:
         error = {
@@ -99,7 +120,12 @@ def insertTrack(payloadJ):
     response = {'message' : (track.id, ' Inserted'),  }
     return response
     
-def updateTrack(track_id):
+def updateTrack(request, track_id):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
     response = {'message' : 'Track updated' }
     return response
     
@@ -114,13 +140,12 @@ def buildTrackDict(track):
 
 @csrf_exempt    
 def users(request, end_path, resource_id):
-    print(end_path)
-    print(resource_id)
+
     if request.method == 'GET' and resource_id is not None:
-        resp = getUser(resource_id)
+        resp = getUser(request, resource_id)
     else:
         if request.method == 'POST' and resource_id is None:
-            resp = insertUser(request.body)
+            resp = insertUser(request)
         else:
             resp = {
                     'error_code' : 501,
@@ -132,7 +157,12 @@ def users(request, end_path, resource_id):
         HttpResponse.status_code = 200    
     return JsonResponse(resp, safe=False)
 
-def getUser(user_id):
+def getUser(request, user_id):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
     try:
         user = Users.objects.get(user_id=user_id.lower())
     except:
@@ -143,8 +173,13 @@ def getUser(user_id):
     payload = buildUserDict(user)
     return payload
 
-def insertUser(payloadJ):
-    payload = json.loads(payloadJ)
+def insertUser(request):
+    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
+        error = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+        return error
+    payload = json.loads(request.body)
     user = Users(
                     user_id = payload['user_id'].lower(),
                     name = payload['name'],
@@ -173,7 +208,6 @@ def insertUser(payloadJ):
     response = {'message' : (user.id, ' Inserted'),  }
     return response
 
-
 def buildUserDict(user):
     user = {
             'id': user.id,
@@ -183,3 +217,92 @@ def buildUserDict(user):
             'password' : user.password
         }
     return user
+
+@csrf_exempt    
+def login(request):
+
+    if request.method == 'POST':
+        payload = json.loads(request.body)
+        try:
+            user = Users.objects.get(user_id=payload['user_id'].lower())
+        except:
+            resp = {
+                    'error_code' : 401,
+                    'error_message' : 'Password update failed' }
+            HttpResponse.status_code = 401    
+            return JsonResponse(resp, safe=False)
+
+        if 'new_password' in payload:
+            resp = changepassword(user, payload['password'], payload['new_password'])
+        else:
+            resp = checkpassword(user, payload['password'])
+        try:                
+            user.save()
+        except ValidationError as e:
+            resp = {
+                    'error_code' : 400,
+                    'error_message' : e.messages }
+#            return error
+        except IntegrityError as e:
+            resp = {
+                    'error_code' : 400,
+                    'error_message' : e.__cause__.pgerror} 
+#            return error
+        except:
+            resp = {
+                    'error_code' : 500,
+                    'error_message' : "Unexpected  Error"}
+#            return error            
+        
+    else:
+        resp = {
+                'error_code' : 501,
+                'error_message' : 'Method not supported' }
+
+    if 'error_code' in resp:
+        HttpResponse.status_code = resp['error_code']
+    else:
+        HttpResponse.status_code = 200
+    return JsonResponse(resp, safe=False)
+
+        
+
+def checkpassword(user, password):
+
+    if pbkdf2_sha256.verify(password, user.password):
+        token = uuid.uuid4()
+        user.token = token
+        user.token_expiry = datetime.datetime.now() + \
+                            datetime.timedelta(minutes=1440)
+
+        response = {'token' : token,
+                    'message' : 'Logged In'  }
+    else:
+        response = {
+                    'error_code' : 401,
+                    'error_message' : 'Logon failed' }
+    return response
+
+def changepassword(user, old_password, new_password):
+    if user.password == "":
+        user.password = pbkdf2_sha256.hash(new_password)
+    else:
+        if pbkdf2_sha256.verify(old_password, user.password):
+            user.password = pbkdf2_sha256.hash(new_password)
+        else:
+            resp = {
+                'error_code' : 401,
+                'error_message' : 'Password update failed' }
+            return resp
+    response = {'message' : 'Password Changed',  }
+    return response    
+
+def checkToken(token):
+    try:
+        user = Users.objects.get(token=token)
+    except:
+        return False
+    
+    if datetime.datetime.now(pytz.utc) > user.token_expiry:
+        return False
+    return True

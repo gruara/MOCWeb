@@ -6,10 +6,17 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from MOCapi.models import Tracks, Users
 from passlib.hash import pbkdf2_sha256
+from django.conf import settings
 import json
 import uuid
 import datetime
 import pytz
+import re
+
+import xml.etree.ElementTree as ET
+
+session = {}
+summary = {}
 
 def index(request):
     HttpResponse.status_code = 501
@@ -21,21 +28,26 @@ def index(request):
 # Create your views here.
 @csrf_exempt
 def tracks(request, end_path, resource_id):
-    if request.method == 'GET' and resource_id is None:
-        resp = getAllTracks(request)
+    if authorized(request) is False:
+        resp = {
+            'error_code' : 401,
+            'error_message' : 'Not authorised' }
     else:
-        if request.method == 'GET' and resource_id is not None:
-            resp = getOneTrack(request, resource_id)
+        if request.method == 'GET' and resource_id is None:
+            resp = getAllTracks(request)
         else:
-            if request.method == 'PUT' and resource_id is not None:
-                resp = updateTrack(request, resource_id)
+            if request.method == 'GET' and resource_id is not None:
+                resp = getOneTrack(request, resource_id)
             else:
-                if request.method == 'POST' and resource_id is None:
-                    resp = insertTrack(request)
+                if request.method == 'PUT' and resource_id is not None:
+                    resp = updateTrack(request, resource_id)
                 else:
-                    resp = {
-                            'error_code' : 501,
-                            'error_message' : 'Method not supported' }
+                    if request.method == 'POST' and resource_id is None:
+                        resp = insertTrack(request)
+                    else:
+                        resp = {
+                                'error_code' : 501,
+                                'error_message' : 'Method not supported' }
     if 'error_code' in resp:
         HttpResponse.status_code = resp['error_code']
     else:
@@ -44,14 +56,8 @@ def tracks(request, end_path, resource_id):
     return JsonResponse(resp, safe=False)
             
 def getAllTracks(request):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
-        
     try:
-        tracks = Tracks.objects.all().filter(user_id='iola@gruar.co.uk')
+        tracks = Tracks.objects.all().filter(user_id=session['user_id'])
     except:
         error = {
                 'error_code' : 500,
@@ -72,11 +78,6 @@ def getAllTracks(request):
     return payload
     
 def getOneTrack(request, track_id):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
     try:
         track = Tracks.objects.get(pk=track_id)
     except:
@@ -88,11 +89,7 @@ def getOneTrack(request, track_id):
     return payload
     
 def insertTrack(request):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
+    print(request.body)
     payload = json.loads(request.body)
     track = Tracks(
                     user_id = payload['user_id'],
@@ -121,11 +118,6 @@ def insertTrack(request):
     return response
     
 def updateTrack(request, track_id):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
     response = {'message' : 'Track updated' }
     return response
     
@@ -136,20 +128,81 @@ def buildTrackDict(track):
             'track_name' : track.track_name,
             'created_on' : track.created_on
         }
-    return trackDict    
-
-@csrf_exempt    
-def users(request, end_path, resource_id):
-
-    if request.method == 'GET' and resource_id is not None:
-        resp = getUser(request, resource_id)
+    return trackDict
+    
+@csrf_exempt
+def trackdetails(request, end_path, resource_id):
+    global summary
+    summary['id'] = resource_id
+    if authorized(request) is False:
+        resp = {
+            'error_code' : 401,
+            'error_message' : 'Not authorised' }
     else:
-        if request.method == 'POST' and resource_id is None:
-            resp = insertUser(request)
+
+        if request.method == 'POST' and resource_id is not None:
+            resp = insertTrackDetails(request)
         else:
             resp = {
                     'error_code' : 501,
                     'error_message' : 'Method not supported' }
+    if 'error_code' in resp:
+        HttpResponse.status_code = resp['error_code']
+    else:
+        HttpResponse.status_code = 200
+   
+    return JsonResponse(resp, safe=False)
+
+def insertTrackDetails(request):
+    global summary
+    root = ET.fromstring(request.body)
+    for child in root:
+        if re.match('.*trk$',child.tag):
+            for trk in child:
+                        if re.match('.*name$',trk.tag):
+                            summary['name'] = trk.text
+                        else:
+                            if re.match('.*trkseg$',trk.tag):
+                                segment(trk)    
+    return {}
+    
+    
+def segment(segment):
+
+    for point in segment:
+        pointdet = {}
+        pointdet['latitude'] = point.attrib['lat']
+        pointdet['longitude'] = point.attrib['lon']
+        for det in point:
+            if re.match('.*time$',det.tag):
+                pointdet['time'] = det.text
+            else:
+                if re.match('.*ele$',det.tag):
+                    pointdet['elevation'] = det.text
+    
+        print(pointdet)
+#         for key in point.items:
+#             print(point.get(key))
+#     
+    
+
+
+@csrf_exempt    
+def users(request, end_path, resource_id):
+    if authorized(request) is False:
+        resp = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+    else:
+        if request.method == 'GET' and resource_id is not None:
+            resp = getUser(request, resource_id)
+        else:
+            if request.method == 'POST' and resource_id is None:
+                resp = insertUser(request)
+            else:
+                resp = {
+                        'error_code' : 501,
+                        'error_message' : 'Method not supported' }
     
     if 'error_code' in resp:
         HttpResponse.status_code = resp['error_code']
@@ -158,11 +211,7 @@ def users(request, end_path, resource_id):
     return JsonResponse(resp, safe=False)
 
 def getUser(request, user_id):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
+
     try:
         user = Users.objects.get(user_id=user_id.lower())
     except:
@@ -174,11 +223,7 @@ def getUser(request, user_id):
     return payload
 
 def insertUser(request):
-    if checkToken(request.META['HTTP_AUTHORIZATION']) is False:
-        error = {
-                'error_code' : 401,
-                'error_message' : 'Not authorised' }
-        return error
+
     payload = json.loads(request.body)
     user = Users(
                     user_id = payload['user_id'].lower(),
@@ -265,15 +310,12 @@ def login(request):
         HttpResponse.status_code = 200
     return JsonResponse(resp, safe=False)
 
-        
-
 def checkpassword(user, password):
-
-    if pbkdf2_sha256.verify(password, user.password):
+    if user.password != ''  and pbkdf2_sha256.verify(password, user.password):
         token = uuid.uuid4()
         user.token = token
-        user.token_expiry = datetime.datetime.now() + \
-                            datetime.timedelta(minutes=1440)
+        user.token_expiry = datetime.datetime.now(pytz.utc) + \
+                            datetime.timedelta(minutes=settings.TOKEN_EXPIRY)
 
         response = {'token' : token,
                     'message' : 'Logged In'  }
@@ -297,12 +339,18 @@ def changepassword(user, old_password, new_password):
     response = {'message' : 'Password Changed',  }
     return response    
 
-def checkToken(token):
+def authorized(request):
+    global session
+    auth = True
+
     try:
-        user = Users.objects.get(token=token)
+        user = Users.objects.get(token=request.META['HTTP_AUTHORIZATION'])
     except:
-        return False
-    
-    if datetime.datetime.now(pytz.utc) > user.token_expiry:
-        return False
-    return True
+        auth = False
+        
+    if auth is True:
+        if datetime.datetime.now(pytz.utc) > user.token_expiry:
+            auth = False
+        else:
+            session['user_id'] = user.user_id
+    return auth

@@ -128,3 +128,5 @@ STATIC_URL = '/static/'
 
 #appends a slash to url
 APPEND_SLASH = False
+
+TOKEN_EXPIRY = 180

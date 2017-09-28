@@ -4,16 +4,17 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core import serializers
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from MOCapi.models import Tracks, Users
+from MOCapi.models import Tracks, Users, TrackDetails
 from passlib.hash import pbkdf2_sha256
 from django.conf import settings
 import json
 import uuid
 import datetime
-import pytz
+#import pytz
 import re
 
 import xml.etree.ElementTree as ET
+from werkzeug.wsgi import responder
 
 session = {}
 summary = {}
@@ -141,7 +142,7 @@ def trackdetails(request, end_path, resource_id):
     else:
 
         if request.method == 'POST' and resource_id is not None:
-            resp = insertTrackDetails(request)
+            resp = parseTrackDetails(request)
         else:
             resp = {
                     'error_code' : 501,
@@ -153,7 +154,7 @@ def trackdetails(request, end_path, resource_id):
    
     return JsonResponse(resp, safe=False)
 
-def insertTrackDetails(request):
+def parseTrackDetails(request):
     global summary
     root = ET.fromstring(request.body)
     for child in root:
@@ -163,29 +164,65 @@ def insertTrackDetails(request):
                             summary['name'] = trk.text
                         else:
                             if re.match('.*trkseg$',trk.tag):
-                                segment(trk)    
-    return {}
+                                resp=segment(trk)
+                                if 'error_code' in resp:
+                                    return resp
+                                    
+    return {'message' : 'Track Details Inserted'}
     
     
 def segment(segment):
 
     for point in segment:
-        pointdet = {}
+        pointdet = {'time' : '', 
+                    'longitude' : '', 
+                    'latitude' : '', 
+                    'elevation' : ''}
         pointdet['latitude'] = point.attrib['lat']
         pointdet['longitude'] = point.attrib['lon']
         for det in point:
             if re.match('.*time$',det.tag):
-                pointdet['time'] = det.text
+                pointdet['time'] = datetime.datetime.strptime(det.text, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d %H:%M:%S%Z')
             else:
                 if re.match('.*ele$',det.tag):
                     pointdet['elevation'] = det.text
     
-        print(pointdet)
-#         for key in point.items:
-#             print(point.get(key))
-#     
-    
+        resp = insertTrackDetails(pointdet)
+        if 'error_code' in resp:
+            return resp
+    return {'message' : 'Track Details Inserted'}
+     
+        
+def insertTrackDetails(detail):
+    global summary
 
+    trackdet = TrackDetails(
+                    track_id = summary['id'],
+                    time = detail['time'].lower(),
+                    longitude = detail['longitude'],
+                    latitude = detail['latitude'],
+                    elevation = detail['elevation'],
+                       )
+    try:                
+        trackdet.save()
+    except ValidationError as e:
+        error = {
+                'error_code' : 400,
+                'error_message' : e.messages }
+        return error
+    except IntegrityError as e:
+        error = {
+                'error_code' : 400,
+                'error_message' : e.__cause__.pgerror} 
+        return error
+    except:
+        error = {
+                'error_code' : 500,
+                'error_message' : "Unexpected  Error"}
+        return error
+
+    response = {'message' : (trackdet.id, ' Inserted'),  }
+    return response
 
 @csrf_exempt    
 def users(request, end_path, resource_id):
@@ -314,7 +351,7 @@ def checkpassword(user, password):
     if user.password != ''  and pbkdf2_sha256.verify(password, user.password):
         token = uuid.uuid4()
         user.token = token
-        user.token_expiry = datetime.datetime.now(pytz.utc) + \
+        user.token_expiry = datetime.datetime.now() + \
                             datetime.timedelta(minutes=settings.TOKEN_EXPIRY)
 
         response = {'token' : token,
@@ -349,7 +386,7 @@ def authorized(request):
         auth = False
         
     if auth is True:
-        if datetime.datetime.now(pytz.utc) > user.token_expiry:
+        if datetime.datetime.now() > user.token_expiry:
             auth = False
         else:
             session['user_id'] = user.user_id

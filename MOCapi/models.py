@@ -12,3 +12,10 @@ class Users(models.Model):
     password = models.CharField(max_length=250)
     token = models.CharField(max_length=250,db_index=True,unique=False)
     token_expiry = models.DateTimeField()
+
+class TrackDetails(models.Model):
+    track_id = models.IntegerField()
+    time = models.DateTimeField()
+    longitude = models.CharField(max_length=250)
+    latitude = models.CharField(max_length=250)
+    elevation = models.CharField(max_length=250)

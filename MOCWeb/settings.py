@@ -81,7 +81,8 @@ DATABASES = {
         'USER': 'MOC_andrew',
         'PASSWORD': 'iolabr0n',
         'HOST': '127.0.0.1',
-        'PORT': '5432',   }
+        'PORT': '5432',
+        'ATOMIC_REQUESTS': True,   }
 }
 
 
@@ -115,7 +116,7 @@ USE_I18N = True
 
 USE_L10N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)

@@ -36,19 +36,16 @@ def tracks(request, end_path, resource_id):
     else:
         if request.method == 'GET' and resource_id is None:
             resp = getAllTracks(request)
+        elif request.method == 'GET' and resource_id is not None:
+            resp = getOneTrack(request, resource_id)
+        elif request.method == 'PUT' and resource_id is not None:
+            resp = updateTrack(request, resource_id)
+        elif request.method == 'POST' and resource_id is None:
+            resp = insertTrack(request)
         else:
-            if request.method == 'GET' and resource_id is not None:
-                resp = getOneTrack(request, resource_id)
-            else:
-                if request.method == 'PUT' and resource_id is not None:
-                    resp = updateTrack(request, resource_id)
-                else:
-                    if request.method == 'POST' and resource_id is None:
-                        resp = insertTrack(request)
-                    else:
-                        resp = {
-                                'error_code' : 501,
-                                'error_message' : 'Method not supported' }
+            resp = {
+                    'error_code' : 501,
+                    'error_message' : 'Method not supported' }
     if 'error_code' in resp:
         HttpResponse.status_code = resp['error_code']
     else:
@@ -75,8 +72,8 @@ def getAllTracks(request):
     for track in tracks:
         dict = buildTrackDict(track)
         payload.append(dict)
-    
-    return payload
+    resp = {'tracks' : payload}
+    return resp
     
 def getOneTrack(request, track_id):
     try:
@@ -90,7 +87,6 @@ def getOneTrack(request, track_id):
     return payload
     
 def insertTrack(request):
-    print(request.body)
     payload = json.loads(request.body)
     track = Tracks(
                     user_id = payload['user_id'],
@@ -140,8 +136,9 @@ def trackdetails(request, end_path, resource_id):
             'error_code' : 401,
             'error_message' : 'Not authorised' }
     else:
-
-        if request.method == 'POST' and resource_id is not None:
+        if request.method == 'GET' and resource_id is not None:
+            resp = getTrackDetails(resource_id)
+        elif request.method == 'POST' and resource_id is not None:
             resp = parseTrackDetails(request)
         else:
             resp = {
@@ -154,24 +151,76 @@ def trackdetails(request, end_path, resource_id):
    
     return JsonResponse(resp, safe=False)
 
+def getTrackDetails(track):
+    try:
+        track = Tracks.objects.get(pk=summary['id'])
+    except:
+        error = {
+                'error_code' : 404,
+                'error_message' : 'Track not found' }
+        return error
+    header = {'id' : track.id,
+              'user-id' : track.user_id,
+              'created_on' : track.created_on,
+              'track_name' : track.track_name}
+    
+    try:
+        trackdets = TrackDetails.objects.all().filter(track=track.id)
+    except:
+        error = {
+                'error_code' : 500,
+                'error_message' : 'Unexpected database error' }
+        return error
+    body = []
+    for trackdet in trackdets:
+        body.append({
+            "time" : trackdet.time,
+            "longitude" : trackdet.longitude,
+            "latitude" : trackdet.latitude,
+            "elevation" : trackdet.elevation})
+        
+    
+    resp = {'track' : header,
+            'details' : body}
+    return resp
+
+
 def parseTrackDetails(request):
     global summary
     root = ET.fromstring(request.body)
     for child in root:
-        if re.match('.*trk$',child.tag):
+        if re.match('.*trk$', child.tag):
             for trk in child:
-                        if re.match('.*name$',trk.tag):
-                            summary['name'] = trk.text
-                        else:
-                            if re.match('.*trkseg$',trk.tag):
-                                resp=segment(trk)
-                                if 'error_code' in resp:
-                                    return resp
-                                    
+                if re.match('.*name$', trk.tag):
+                    summary['name'] = trk.text
+                elif re.match('.*trkseg$', trk.tag):
+                    resp = segment(trk)
+                    if 'error_code' in resp:
+                        return resp
+        else:
+            if re.match('.*exerciseinfo$', child.tag):
+                for det in child:
+                    if re.match('.*exercisetype$', det.tag):
+                        summary['type'] = det.text
+                    elif re.match('.*distance$', det.tag):
+                        summary['distance'] = det.text
+                    elif re.match('.*duration$', det.tag):
+                        summary['duration'] = det.text
+                    elif re.match('.*avgspeed$', det.tag):
+                        summary['avgspeed'] = det.text
+                 
     return {'message' : 'Track Details Inserted'}
     
     
 def segment(segment):
+    global summary
+    try:
+        track = Tracks.objects.get(pk=summary['id'])
+    except:
+        error = {
+                'error_code' : 404,
+                'error_message' : 'Track not found' }
+        return error
 
     for point in segment:
         pointdet = {'time' : '', 
@@ -181,23 +230,21 @@ def segment(segment):
         pointdet['latitude'] = point.attrib['lat']
         pointdet['longitude'] = point.attrib['lon']
         for det in point:
-            if re.match('.*time$',det.tag):
+            if re.match('.*time$', det.tag):
                 pointdet['time'] = datetime.datetime.strptime(det.text, '%Y-%m-%dT%H:%M:%SZ').strftime('%Y-%m-%d %H:%M:%S%Z')
-            else:
-                if re.match('.*ele$',det.tag):
-                    pointdet['elevation'] = det.text
+            elif re.match('.*ele$', det.tag):
+                pointdet['elevation'] = det.text
     
-        resp = insertTrackDetails(pointdet)
+        resp = insertTrackDetails(pointdet,track)
         if 'error_code' in resp:
             return resp
     return {'message' : 'Track Details Inserted'}
      
         
-def insertTrackDetails(detail):
+def insertTrackDetails(detail,track):
     global summary
-
     trackdet = TrackDetails(
-                    track_id = summary['id'],
+                    track = track,
                     time = detail['time'].lower(),
                     longitude = detail['longitude'],
                     latitude = detail['latitude'],
@@ -233,14 +280,13 @@ def users(request, end_path, resource_id):
     else:
         if request.method == 'GET' and resource_id is not None:
             resp = getUser(request, resource_id)
+        elif request.method == 'POST' and resource_id is None:
+            resp = insertUser(request)
         else:
-            if request.method == 'POST' and resource_id is None:
-                resp = insertUser(request)
-            else:
-                resp = {
-                        'error_code' : 501,
-                        'error_message' : 'Method not supported' }
-    
+            resp = {
+                    'error_code' : 501,
+                    'error_message' : 'Method not supported' }
+
     if 'error_code' in resp:
         HttpResponse.status_code = resp['error_code']
     else:
@@ -368,7 +414,7 @@ def changepassword(user, old_password, new_password):
     else:
         if pbkdf2_sha256.verify(old_password, user.password):
             user.password = pbkdf2_sha256.hash(new_password)
-        else:
+        else:   
             resp = {
                 'error_code' : 401,
                 'error_message' : 'Password update failed' }

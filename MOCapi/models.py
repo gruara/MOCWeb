@@ -14,7 +14,7 @@ class Users(models.Model):
     token_expiry = models.DateTimeField()
 
 class TrackDetails(models.Model):
-    track_id = models.IntegerField()
+    track = models.ForeignKey('Tracks',on_delete=models.CASCADE)
     time = models.DateTimeField()
     longitude = models.CharField(max_length=250)
     latitude = models.CharField(max_length=250)

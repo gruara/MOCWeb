@@ -160,7 +160,7 @@ def getTrackDetails(track):
                 'error_message' : 'Track not found' }
         return error
     header = {'id' : track.id,
-              'user-id' : track.user_id,
+              'user_id' : track.user_id,
               'created_on' : track.created_on,
               'track_name' : track.track_name}
     

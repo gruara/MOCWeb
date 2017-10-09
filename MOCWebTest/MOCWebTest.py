@@ -1,8 +1,9 @@
 import argparse
 import geopy.distance
 import json
+import logging
 import requests
-import settings
+import  settings
 from timeit import default_timer as timer 
 #from _ast import Param
 
@@ -12,6 +13,8 @@ params = {}
 def main():
 #MOCWebTest -u 'user_name, -p 'password' -c 'Command' -r 'Resource_ID' -d 'PayLoad'
     global params 
+
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-u",
                         "--user",
@@ -74,7 +77,6 @@ def logon(user, password, environment):
 def gettrack():
     global params
     if logon(params['user'], params['password'], params['environment']):
-        print('4')
         url = settings.BASE_URL[params['environment']] +\
               '/v1.0/tracks/' +\
               params['resourceid']
@@ -84,7 +86,6 @@ def gettrack():
         except:
             print('Commuication error')
             return
-        print('5')
         if r.status_code == 200:
             resp = json.loads(r.text)
         else:
@@ -130,7 +131,10 @@ def plottrack():
             total_distance += distance
             previous = point
             
-    print('calculated ', total_distance)        
+    print('{1} {0}'.format(total_distance, 'Calculated'))
+    print('calculated {0:.2f}'.format(total_distance))
+    print('calculated {:.0f}'.format(total_distance))
+            
 def timetest():
     global params
     for i in range(10):

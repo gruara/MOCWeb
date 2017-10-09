@@ -119,6 +119,26 @@ USE_L10N = True
 USE_TZ = False
 
 
+# Logging below controls Django RunServer Logging not app logging which is in
+# MOCApi further below
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': 'C:\\Users\\Andrew\\MOCWeb\\MOCWeb.log',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.11/howto/static-files/
 
@@ -131,3 +151,19 @@ STATIC_URL = '/static/'
 APPEND_SLASH = False
 
 TOKEN_EXPIRY = 180
+
+BASE_URL = {'LOCALTEST' : 'http://localhost:8000/MOCWeb/api',
+            'LIVE' : 'http://www.gruar.co.uk/8000/MOCWeb/api/' }
+# App Log settings
+NOTSET = 0
+DEBUG = 10
+INFO = 20
+WARNING = 30
+ERROR = 40
+CRITICAL = 50
+
+LOGLEVEL = INFO
+
+FORMAT = '%(asctime)-15s %(levelname)-8s %(module)-15s %(funcName)-20s %(message)s'
+LOGFILE = 'C:\\Users\\Andrew\\MOCWeb\\MOCWeb.log'
+

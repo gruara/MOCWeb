@@ -8,6 +8,7 @@ from MOCapi.models import Tracks, Users, TrackDetails
 from passlib.hash import pbkdf2_sha256
 from django.conf import settings
 import json
+import logging
 import uuid
 import datetime
 #import pytz
@@ -19,6 +20,14 @@ from werkzeug.wsgi import responder
 session = {}
 summary = {}
 
+
+logging.basicConfig(format=settings.FORMAT,filename=settings.LOGFILE,filemode='a')
+d = {'clientip': '192.168.0.1', 'user': 'unknown'}
+logger = logging.getLogger(__name__)
+logger.setLevel(settings.LOGLEVEL)
+logger.warning('Process started', extra=d)
+
+
 def index(request):
     HttpResponse.status_code = 501
     resp = {
@@ -29,6 +38,8 @@ def index(request):
 # Create your views here.
 @csrf_exempt
 def tracks(request, end_path, resource_id):
+    logger.info(requestDetails(request))
+    
     if authorized(request) is False:
         resp = {
             'error_code' : 401,
@@ -76,6 +87,9 @@ def getAllTracks(request):
     return resp
     
 def getOneTrack(request, track_id):
+#    extra=d allows non standard entries to be added
+    logger.info('getOneTrack Started', extra=d)
+    logger.error('It is going to blow Jim', extra=d)
     try:
         track = Tracks.objects.get(pk=track_id)
     except:
@@ -273,6 +287,8 @@ def insertTrackDetails(detail,track):
 
 @csrf_exempt    
 def users(request, end_path, resource_id):
+    logger.info(requestDetails(request))
+
     if authorized(request) is False:
         resp = {
                 'error_code' : 401,
@@ -348,6 +364,7 @@ def buildUserDict(user):
 
 @csrf_exempt    
 def login(request):
+    logger.info(requestDetails(request))
 
     if request.method == 'POST':
         payload = json.loads(request.body)
@@ -437,3 +454,6 @@ def authorized(request):
         else:
             session['user_id'] = user.user_id
     return auth
+
+def requestDetails(request):
+    return '{0} {1} {2}'.format(request.method, request.path, request.META['REMOTE_ADDR'])

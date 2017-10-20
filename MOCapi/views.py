@@ -4,7 +4,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core import serializers
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
-from MOCapi.models import Tracks, Users, TrackDetails
+from MOCapi.models import Tracks, Users, Images, TrackDetails
 from passlib.hash import pbkdf2_sha256
 from django.conf import settings
 import json
@@ -361,6 +361,86 @@ def buildUserDict(user):
             'password' : user.password
         }
     return user
+
+@csrf_exempt    
+def images(request, end_path, resource_id):
+    logger.info(requestDetails(request))
+
+    if authorized(request) is False:
+        resp = {
+                'error_code' : 401,
+                'error_message' : 'Not authorised' }
+    else:
+        if request.method == 'GET' and resource_id is not None:
+            resp = getImage(request, resource_id)
+        elif request.method == 'POST' and resource_id is None:
+            resp = insertImage(request)
+        else:
+            resp = {
+                    'error_code' : 501,
+                    'error_message' : 'Method not supported' }
+
+    if 'error_code' in resp:
+        HttpResponse.status_code = resp['error_code']
+    else:
+        HttpResponse.status_code = 200    
+    return JsonResponse(resp, safe=False)
+
+def getImage(request, image_name):
+
+    try:
+        image = Images.objects.get(image_name=image_name.lower())
+    except:
+        error = {
+                'error_code' : 404,
+                'error_message' : 'Image not found' }
+        return error
+    payload = buildImageDict(image)
+    return payload
+
+def insertImage(request):
+
+    payload = json.loads(request.body)
+    image = Images(
+                    image_name = payload['image_name'].lower(),
+                    licence_no = payload['licence_no'],
+                    file_type = payload['file_type'],
+                    user_id = payload['user_id'],
+                    created_on = payload['created_on'],
+                    image = payload['image']
+                      )
+    try:                
+        image.save()
+    except ValidationError as e:
+        error = {
+                'error_code' : 400,
+                'error_message' : e.messages }
+        return error
+    except IntegrityError as e:
+        error = {
+                'error_code' : 400,
+                'error_message' : e.__cause__.pgerror} 
+        return error
+    except:
+        error = {
+                'error_code' : 500,
+                'error_message' : "Unexpected  Error"}
+        return error
+
+    response = {'message' : (image.id, ' Inserted'),  }
+    return response
+
+def buildImageDict(image):
+    image = {
+            'id': image.id,
+            'image_name' : image.image_name,
+            'licence_no' : image.licence_no,
+            'file_type' : image.file_type,
+            'user_id' : image.user_id,
+            'created_on' : image.created_on,
+            'image' : image.image
+        }
+    return image
 
 @csrf_exempt    
 def login(request):

@@ -19,3 +19,11 @@ class TrackDetails(models.Model):
     longitude = models.CharField(max_length=250)
     latitude = models.CharField(max_length=250)
     elevation = models.CharField(max_length=250)
+
+class Images(models.Model):
+    image_name= models.CharField(max_length=250,db_index=True,unique=True)
+    licence_no=models.CharField(max_length=250,db_index=True,unique=False)
+    file_type = models.CharField(max_length=250)
+    user_id = models.CharField(max_length=250)
+    created_on = models.DateField()
+    image = models.TextField()

@@ -119,6 +119,22 @@ USE_L10N = True
 USE_TZ = False
 
 
+
+# Static files (CSS, JavaScript, Images)
+# https://docs.djangoproject.com/en/1.11/howto/static-files/
+
+STATIC_URL = '/static/'
+
+
+# AWG changes
+
+#appends a slash to url
+APPEND_SLASH = False
+
+TOKEN_EXPIRY = 180
+
+BASE_URL = {'LOCALTEST' : 'http://localhost:8000/MOCWeb/api',
+            'LIVE' : 'http://www.gruar.co.uk/8000/MOCWeb/api/' }
 # Logging below controls Django RunServer Logging not app logging which is in
 # MOCApi further below
 LOGGING = {
@@ -139,21 +155,7 @@ LOGGING = {
         },
     },
 }
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/1.11/howto/static-files/
 
-STATIC_URL = '/static/'
-
-
-# AWG changes
-
-#appends a slash to url
-APPEND_SLASH = False
-
-TOKEN_EXPIRY = 180
-
-BASE_URL = {'LOCALTEST' : 'http://localhost:8000/MOCWeb/api',
-            'LIVE' : 'http://www.gruar.co.uk/8000/MOCWeb/api/' }
 # App Log settings
 NOTSET = 0
 DEBUG = 10
